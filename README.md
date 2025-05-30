@@ -1,5 +1,14 @@
+> [!NOTE]  
+> This project is a WIP fork from a project to get this running on X-Plane.
+> You won't need X-Plane for this project, but you need MSFS20 and [SimBridge for Linux](https://github.com/Chris3007/simbridge_linux)
+
+> [!NOTE]  
+> This project does not have all features implemented yet.
+> It is currently only possible to read the display, inputs are not implemented.
+> Not all text will have the correct color or size, but everything should be there
+
 # winwing_mcdu
-Use winwing mcdu on Linuc and Mac for X-Plane Toliss Airbus.
+Use winwing mcdu on Linux the FlyByWire Airbus A32NX using SimBridge.
 
 ## Status
 The scripts fetsches all necessery data from mcdu and displays a mcdu unit in the console and prints all text on winwing mcdu. 
@@ -8,7 +17,7 @@ From V1.4 on, the scripts polls for new versions from github and displays it aft
 For Discussions use https://forums.x-plane.org/forums/topic/324814-winwing-mcdu-on-x-plane-for-mac-studio-and-linux/
 
 
-![mcdu demo image](./documentation/A319MCDU1.jpg)
+![mcdu demo image](./documentation/A32NX-FBW-MCDU1.jpg)
 
 
 ## Installation
