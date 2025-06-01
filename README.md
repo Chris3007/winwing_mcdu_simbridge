@@ -1,70 +1,61 @@
-> [!NOTE]  
-> This project is a WIP fork from a project to get this running on X-Plane.
-> You won't need X-Plane for this project, but you need MSFS20 and [SimBridge for Linux](https://github.com/Chris3007/simbridge_linux)
+> [!NOTE]
+> This project is a WIP fork of a tool originally developed for use with X-Plane and Toliss aircraft.
+> This fork adapts it for Microsoft Flight Simulator 2020 (MSFS20) with FlyByWire A32NX and SimBridge for Linux.
+> You do not need X-Plane for this version.
 
-> [!NOTE]  
-> This project does not have all features implemented yet.
-> It is currently only possible to read the display, inputs are not implemented.
-> Not all text will have the correct color or size, but everything should be there
 
-# winwing_mcdu
-Use winwing mcdu on Linux the FlyByWire Airbus A32NX using SimBridge.
+# winwing_mcdu (MSFS20 fork)
 
-## Status
-The scripts fetsches all necessery data from mcdu and displays a mcdu unit in the console and prints all text on winwing mcdu. 
-From V1.4 on, the scripts polls for new versions from github and displays it after startup if a new version is available.
+Use the Winwing MCDU on Linux with the FlyByWire Airbus A32NX in MSFS2020, using SimBridge for data integration.
 
-For Discussions use https://forums.x-plane.org/forums/topic/324814-winwing-mcdu-on-x-plane-for-mac-studio-and-linux/
+Some text might not display correctly (wrong size/color), but every thing you see in the sim, should also be visible on the Winwing MCDU.
 
+This is a fork of the original winwing_mcdu project for X-Plane, adapted for use with MSFS2020.
+Credits to the original author (schenlap/memo5) for the base implementation.
 
 ![mcdu demo image](./documentation/A32NX-FBW-MCDU1.jpg)
 
+## Status
+
+The script fetches relevant data from the MCDU via SimBridge and mirrors the text output to the Winwing MCDU hardware display.
+
 
 ## Installation
+### Debian-based systems
 
-#### Debian based system
-1. clone the repo where you want
-2. copy `udev/71-winwing.rules` to `/etc/udev/rules.d`  
-`sudo cp udev/71-winwing.rules /etc/udev/rules.d/`
-3. install dependencies (on debian based systems)  
-`sudo aptitide install python3-hid libhidapi-hidraw0`
-5. start script (with udev rule no sudo needed): `python3 ./winwing_mcdu.py` when X-Plane with Toliss aircraft is loaded.
+Clone the repository.
 
+Copy udev rules:
 
-#### MAC-OS
+    sudo cp udev/71-winwing.rules /etc/udev/rules.d/
 
-1. clone the repo where you want
-2. change into the directory `cd winwing_mcdu`
-3. install homebrew
-4. install dependencies
-`python3 -m pip install hid`
-`python3 -m pip install requests`
-5. brew install hidapi
-6. let hid find hidapi: `ln -s /opt/homebrew/lib/libhidapi.dylib .`
-7. start script with sudo: `sudo python3 ./winwing_mcdu.py` when X-Plane with Toliss aircraft is loaded.
+Install dependencies:
 
+    sudo apt install python3-hid libhidapi-hidraw0 websocket-client
 
-## Use MCDU
-1. start X-Plane
-2. enable incoming traffic in settings / network (at the very bottom of the page)
-3. load Toliss A319
-4. start script as written above
-5. enjoy flying (and report bugs :-)  )
+Run the script:
+
+    python3 ./simbridge.py
+
+# Usage
+
+Start MSFS2020 and load the FlyByWire A32NX.
+
+Ensure SimBridge is running and correctly configured (reachable on localhost:8380).
+
+Run the script as outlined above.
+
+The MCDU output will be mirrored to the hardware and console.
 
 
-## developer documentation
-See [documention](./documentation/README.md) for developers. TODO
+This project is experimental. Use at your own risk.
 
-## Notes
-Use at your own risk. Updates to the MCDU can make the script incompatible.
-TODO: The data sent in the USB protocol by SimApp Pro has not yet been fully implemented, only to the extent that it currently works.
+Updates to MSFS20 or FlyByWire A32NX may break compatibility.
 
-## Next steps
- * TODO 
+# Next Steps / TODO
+Improve font rendering accuracy (size, color)
 
-## Contact
-<memo_5_@gmx.at> (without the two underscores!) or as pm in https://forums.x-plane.org, user memo5.
-
-## Sponsoring
-To sponsor you can ![buy_me_a_coffee](https://github.com/user-attachments/assets/d0a94d75-9ad3-41e4-8b89-876c0a2fdf36)
+# Sponsoring
+Support the original developer:\
+![Buy them a coffee](https://github.com/user-attachments/assets/d0a94d75-9ad3-41e4-8b89-876c0a2fdf36)\
 [http://buymeacoffee.com/schenlap](http://buymeacoffee.com/schenlap)

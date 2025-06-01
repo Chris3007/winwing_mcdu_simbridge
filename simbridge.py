@@ -5,19 +5,54 @@ import re
 import hid
 import math
 import rel
+from dataclasses import dataclass
 from threading import Thread, Event, Lock
 from enum import Enum, IntEnum
+from time import sleep
 
-from winwing_mcdu import PAGE_LINES, PAGE_CHARS_PER_LINE, DEVICEMASK, PAGE_BYTES_PER_LINE, PAGE_BYTES_PER_CHAR
 
 # Global vars
 display_mgr = ''
 device = ''
-screen_brightness = 128
-panel_brightness = 128
+buttonlist = []
+values = []
+
+ws = ''
 
 
-# --- Leds class stores ids for usb device ---
+BUTTONS_CNT = 99  # TODO
+PAGE_LINES = 14  # Header + 6 * label + 6 * cont + textbox
+PAGE_CHARS_PER_LINE = 24
+PAGE_BYTES_PER_CHAR = 3
+PAGE_BYTES_PER_LINE = PAGE_CHARS_PER_LINE * PAGE_BYTES_PER_CHAR
+PAGE_BYTES_PER_PAGE = PAGE_BYTES_PER_LINE * PAGE_LINES
+
+buttons_press_event = [0] * BUTTONS_CNT
+
+
+class DEVICEMASK(IntEnum):
+    NONE = 0
+    MCDU = 0x01
+    PFP3N = 0x02
+    PFP4 = 0x04
+    PFP7 = 0x08
+    CAP = 0x10
+    FO = 0x20
+    OBS = 0x40
+
+
+class ButtonType(Enum):
+    SWITCH = 0
+    TOGGLE = 1
+    SEND_0 = 2
+    SEND_1 = 3
+    SEND_2 = 4
+    SEND_3 = 5
+    SEND_4 = 6
+    SEND_5 = 7
+    NONE = 5  # for testing
+
+
 class Leds(Enum):
     BACKLIGHT = 0  # 0 .. 255
     SCREEN_BACKLIGHT = 1  # 0 .. 255
@@ -32,7 +67,46 @@ class Leds(Enum):
     FM2 = 16
 
 
+class DrefType(Enum):
+    DATA = 0
+    CMD = 1
+    NONE = 2  # for testing
+
+
+@dataclass
+class Button:
+    id: int
+    label: str
+    dataref: str = None
+    dreftype: DrefType = DrefType.DATA
+    type: ButtonType = ButtonType.NONE
+    led: Leds = None
+
+
+values_processed = Event()
+xplane_connected = False
+buttonlist = []
+values = []
+
+led_brightness = 180
+
+device_config = DEVICEMASK.NONE
+
+
+class Byte(Enum):
+    H0 = 0
+
+
+@dataclass
+class Flag:
+    name: str
+    byte: Byte
+    mask: int
+    value: bool = False
+
 # --- USB Manager Class for Device Detection ---
+
+
 class UsbManager:
     def __init__(self):
         self.device = None
@@ -225,7 +299,6 @@ class DisplayManager:
             raise ValueError("Position number out of range")
         if len(text) > PAGE_CHARS_PER_LINE:
             raise ValueError("Text too long for line")
-        
 
         # data_low, data_high = self._data_from_col_font(color, font_small)
         pos = pos * PAGE_BYTES_PER_CHAR
@@ -236,6 +309,275 @@ class DisplayManager:
             self.page[line][pos + c * PAGE_BYTES_PER_CHAR + 1] = font_small
             self.page[line][pos + c * PAGE_BYTES_PER_CHAR +
                             PAGE_BYTES_PER_CHAR - 1] = text[c]
+
+
+def create_button_list_mcdu():
+    buttonlist.append(Button(0, "LSK1L", "event:left:L1",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(1, "LSK2L", "event:left:L2",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(2, "LSK3L", "event:left:L3",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(3, "LSK4L", "event:left:L4",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(4, "LSK5L", "event:left:L5",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(5, "LSK6L", "event:left:L6",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(6, "LSK1R", "event:left:R1",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(7, "LSK2R", "event:left:R2",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(8, "LSK3R", "event:left:R3",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(9, "LSK4R", "event:left:R4",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(10, "LSK5R", "event:left:R5",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(11, "LSK6R", "event:left:R6",
+                      DrefType.CMD, ButtonType.TOGGLE))  # 0x800
+    buttonlist.append(Button(12, "DIRTO", "event:left:DIR",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(13, "PROG", "event:left:PROG",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(14, "PERF", "event:left:PERF",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(15, "INIT", "event:left:INIT",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(16, "DATA", "event:left:DATA",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    # buttonlist.append(Button(17, "EMTYR", "toliss_airbus/iscs_open",
+    #                   DrefType.CMD, ButtonType.TOGGLE))  # 17 emtpy, map to open ICSC screen
+    buttonlist.append(
+        Button(18, "BRT", "event:left:BRT", DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(19, "FPLN", "event:left:FPLN",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(20, "RADNAV", "event:left:RAD",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(21, "FUEL", "event:left:FUEL",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(22, "SEC-FPLN", "event:left:SEC",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(23, "ATC", "event:left:ATC",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(24, "MENU", "event:left:MENU",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(25, "DIM", "event:left:DIM",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(
+        Button(26, "AIRPORT", "event:left:AIRPORT", DrefType.CMD, ButtonType.TOGGLE))
+    # buttonlist.append(Button(27, "PURSER", "AirbusFBW/purser/fwd",
+    #                   DrefType.CMD, ButtonType.TOGGLE))  # 27 empty, map to CALL purser FWD
+    buttonlist.append(Button(28, "SLEW_LEFT", "event:left:LEFT",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(29, "SLEW_UP", "event:left:UP",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(
+        Button(30, "SLEW_RIGHT", "event:left:RIGHT", DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(31, "SLEW_DOWN", "event:left:DOWN",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(32, "KEY1", "event:left:1",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(33, "KEY2", "event:left:2",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(34, "KEY3", "event:left:3",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(35, "KEY4", "event:left4",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(36, "KEY5", "event:left:5",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(37, "KEY6", "event:left:6",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(38, "KEY7", "event:left:7",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(39, "KEY8", "event:left:8",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(40, "KEY9", "event:left:9",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(41, "DOT", "event:left:DOT",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(42, "KEY0", "event:left:0",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(
+        43, "PLUSMINUS", "event:left:PLUSMINUS", DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(44, "KEYA", "event:left:A",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(45, "KEYB", "event:left:B",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(46, "KEYC", "event:left:C",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(47, "KEYD", "event:left:D",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(48, "KEYE", "event:left:E",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(49, "KEYF", "event:left:F",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(50, "KEYG", "event:left:G",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(51, "KEYH", "event:left:H",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(52, "KEYI", "event:left:I",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(53, "KEYJ", "event:left:J",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(54, "KEYK", "event:left:K",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(55, "KEYL", "event:left:L",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(56, "KEYM", "event:left:M",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(57, "KEYN", "event:left:N",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(58, "KEYO", "event:left:O",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(59, "KEYP", "event:left:P",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(60, "KEYQ", "event:left:Q",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(61, "KEYR", "event:left:R",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(62, "KEYS", "event:left:S",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(63, "KEYT", "event:left:T",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(64, "KEYU", "event:left:U",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(65, "KEYV", "event:left:V",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(66, "KEYW", "event:left:W",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(67, "KEYX", "event:left:X",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(68, "KEYY", "event:left:Y",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(69, "KEYZ", "event:left:Z",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(70, "SLASH", "event:left:DIV",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(71, "SPACE", "event:left:SP",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(72, "OVERFLY", "event:left:OVFY",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(73, "Clear", "event:left:CLR",
+                      DrefType.CMD, ButtonType.TOGGLE))
+    buttonlist.append(Button(75, "LCDBright", "event:left:BRIGHTUP",
+                      DrefType.DATA, ButtonType.NONE, Leds.SCREEN_BACKLIGHT))
+    buttonlist.append(Button(75, "Backlight", "ckpt/fped/lights/mainPedLeft/anim",
+                      DrefType.DATA, ButtonType.NONE, Leds.BACKLIGHT))
+
+
+def xor_bitmask(a, b, bitmask):
+    return (a & bitmask) != (b & bitmask)
+
+
+def mcdu_button_event():
+    # print(f'events: press: {buttons_press_event}, release: {buttons_release_event}')
+    for b in buttonlist:
+
+        if not any(buttons_press_event):  # and not any(buttons_release_event):
+            break
+        if b.id == None:
+            continue
+        if buttons_press_event[b.id]:
+            buttons_press_event[b.id] = 0
+
+            if device_config & DEVICEMASK.FO:
+                b.dataref = b.dataref.replace(
+                    'AirbusFBW/MCDU1', 'AirbusFBW/MCDU2')
+
+            # print(f'button {b.label} pressed')
+            if b.type == ButtonType.TOGGLE:
+                val = b.dataref
+                if b.dreftype == DrefType.DATA:
+                    print(
+                        f'set dataref {b.dataref} from {bool(val)} to {not bool(val)}')
+                    # xp.WriteDataRef(b.dataref, not bool(val))
+                elif b.dreftype == DrefType.CMD:
+                    ws.send(b.dataref)
+                    print(f'send command {b.dataref}')
+                    # xp.sendCommand(b.dataref)
+            elif b.type == ButtonType.SWITCH:
+                # val = datacache[b.dataref]
+                # if b.dreftype == DrefType.DATA:
+                #     print(f'set dataref {b.dataref} to 1')
+                #     # xp.WriteDataRef(b.dataref, 1)
+                # elif b.dreftype == DrefType.CMD:
+                    print(f'send command {b.dataref}')
+                    # xp.sendCommand(b.dataref)
+            # elif b.type == ButtonType.SEND_0:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 0')
+            #         # xp.WriteDataRef(b.dataref, 0)
+            # elif b.type == ButtonType.SEND_1:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 1')
+            #         # xp.WriteDataRef(b.dataref, 1)
+            # elif b.type == ButtonType.SEND_2:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 2')
+            #         # xp.WriteDataRef(b.dataref, 2)
+            # elif b.type == ButtonType.SEND_3:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 3')
+            #         # xp.WriteDataRef(b.dataref, 3)
+            # elif b.type == ButtonType.SEND_4:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 4')
+            #         # xp.WriteDataRef(b.dataref, 4)
+            # elif b.type == ButtonType.SEND_5:
+            #     if b.dreftype == DrefType.DATA:
+            #         print(f'set dataref {b.dataref} to 5')
+            #         # xp.WriteDataRef(b.dataref, 5)
+            else:
+                print(f'no known button type for button {b.label}')
+        # if buttons_release_event[b.id]:
+        #     buttons_release_event[b.id] = 0
+        #     print(f'button {b.label} released')
+        #     if b.type == ButtonType.SWITCH:
+        #         print("asd")
+        #         #xp.WriteDataRef(b.dataref, 0)
+
+
+def mcdu_create_events(usb_mgr, display_mgr):
+    global values
+    sleep(2)  # wait for values to be available
+    buttons_last = 0
+    while True:
+
+        # set_datacache(usb_mgr, display_mgr, values.copy())
+        values_processed.set()
+        sleep(0.005)
+        # print('#', end='', flush=True) # TEST1: should print many '#' in console
+        try:
+            data_in = usb_mgr.device.read(0x81, 25)
+        except Exception as error:
+            print(f' *** continue after usb-in error: {error} ***')  # TODO
+            sleep(0.5)  # TODO remove
+            continue
+        if len(data_in) == 14:  # we get this often but don't understand yet. May have someting to do with leds set
+            continue
+        if len(data_in) != 25:
+            print(f'rx data count {len(data_in)} not valid')
+            continue
+        # print(f"data_in: {data_in}")
+
+        # create button bit-pattern
+        buttons = 0
+        for i in range(12):
+            buttons |= data_in[i + 1] << (8 * i)
+        # print(hex(buttons)) # TEST2: you should see a difference when pressing buttons
+        for i in range(BUTTONS_CNT):
+            mask = 0x01 << i
+            if xor_bitmask(buttons, buttons_last, mask):
+                # print(f"buttons: {format(buttons, "#04x"):^14}")
+                if buttons & mask:
+                    buttons_press_event[i] = 1
+                # else: Button releasing not necessary in simbrief
+                #     buttons_release_event[i] = 1
+
+                mcdu_button_event()
+
+        buttons_last = buttons
 
 
 def update_mcdu(display_mgr, data):
@@ -263,7 +605,7 @@ def update_mcdu(display_mgr, data):
 
     # SCRATCHPAD TEXT
     text, spaces, color, font_small = line_parser(data['scratchpad'])
-    print(color)
+
     # If there are no spaces for title, guesstimate where it should be
     if spaces == 0:
         print('Warning: no scratchpad location')
@@ -282,9 +624,8 @@ def update_mcdu_lines(lines):
     global display_mgr
 
     for i, line in enumerate(lines):
-        print(f'display:{line}')
+        # Index for line heigth should always be lower to accomodate for title
         idx = i + 1
-        print(f'index: {idx}')
 
         seg1, seg2, seg3 = line
         s1_present = bool(seg1)
@@ -297,23 +638,25 @@ def update_mcdu_lines(lines):
                 continue
 
             if '{sp}{sp}{sp}{sp}' in seg1:
-                print(f'splitting: {seg1}')
                 before, sep, after = seg1.partition('{sp}{sp}{sp}{sp}')
-                print(f'segments: {[before, sep + after]}')
-                s1_text, s1_spaces, s1_color, s1_font_small = line_parser(before)
-                s2_text, s2_spaces, s2_color, s2_font_small = line_parser(sep + after)
+                s1_text, s1_spaces, s1_color, s1_font_small = line_parser(
+                    before)
+                s2_text, s2_spaces, s2_color, s2_font_small = line_parser(
+                    sep + after)
                 s2_present = len(check_empty_line(s2_text)) > 0
             else:
                 s1_text, s1_spaces, s1_color, s1_font_small = line_parser(seg1)
                 s2_text = s2_spaces = s2_color = s2_font_small = None
 
             if s1_present:
-                display_mgr.write_line_to_page(idx, s1_spaces, s1_text, s1_color, s1_font_small)
+                display_mgr.write_line_to_page(
+                    idx, s1_spaces, s1_text, s1_color, s1_font_small)
 
             if s2_present:
                 s2_spaces = (s2_spaces or 0) + s1_spaces + len(s1_text)
-                print(f's2 spaces: {s2_spaces}')
-                display_mgr.write_line_to_page(idx, s2_spaces, s2_text.rstrip(), s2_color, s2_font_small)
+
+                display_mgr.write_line_to_page(
+                    idx, s2_spaces, s2_text.rstrip(), s2_color, s2_font_small)
             continue
 
         # Parse all present segments
@@ -323,18 +666,22 @@ def update_mcdu_lines(lines):
 
         if s1:
             s1_text, s1_spaces, s1_color, s1_font_small = s1
-            display_mgr.write_line_to_page(idx, s1_spaces, s1_text, s1_color, s1_font_small)
+            display_mgr.write_line_to_page(
+                idx, s1_spaces, s1_text, s1_color, s1_font_small)
 
         if s2:
             s2_text, s2_spaces, s2_color, s2_font_small = s2
             s2_spaces = 24 - (len(s2_text) + s2_spaces)
-            display_mgr.write_line_to_page(idx, s2_spaces, s2_text, s2_color, s2_font_small)
+            display_mgr.write_line_to_page(
+                idx, s2_spaces, s2_text, s2_color, s2_font_small)
 
         if s3:
             s3_text, s3_spaces, s3_color, s3_font_small = s3
             total_width = len(s3_text) + s3_spaces
-            s3_spaces = math.ceil((PAGE_CHARS_PER_LINE / 2) - (total_width / 2))
-            display_mgr.write_line_to_page(idx, s3_spaces, s3_text, s3_color, s3_font_small)
+            s3_spaces = math.ceil(
+                (PAGE_CHARS_PER_LINE / 2) - (total_width / 2))
+            display_mgr.write_line_to_page(
+                idx, s3_spaces, s3_text, s3_color, s3_font_small)
 
 
 def check_empty_line(line):
@@ -347,14 +694,11 @@ def line_parser(line):
     color = 'W'
     font_small = False
 
-
     # Remove the starting white from (almost) every line
     if line.startswith('{white}'):
         final_line = line[7:]
     else:
         final_line = line
-
-    print(f"text 363: '{final_line}'")
 
     while final_line.startswith("{sp}") or final_line.startswith('\\xa0'):
         spaces += 1
@@ -368,7 +712,6 @@ def line_parser(line):
         font_small = False
         final_line = final_line[5:]
 
-    print(f"text 371: '{final_line}'")
 
     full_color, color = determine_color(final_line)
 
@@ -381,17 +724,13 @@ def line_parser(line):
         font_small = True
         final_line = final_line[7:]
 
-    print(f"text 417: '{final_line}'")
 
     final_line = final_line.replace('{sp}', ' ')
     final_line = final_line.replace('\xa0', ' ')
 
-    print(f"text 421: '{final_line}'")
-
     # Remove all other tokens like {end}, {small}, {big}, {inop}, etc.
     final_line = re.sub(r"\{[a-zA-Z0-9 _-]+\}", "", final_line)
 
-    print(f"text 387: '{final_line}'")
 
     # Strip trailing spaces (but keep internal multiple spaces)
     # Only do this if there is >1 space
@@ -399,11 +738,9 @@ def line_parser(line):
     if final_line.endswith('  '):
         final_line = final_line.rstrip()
 
-
     # Sometimes small text is indicated by a single space in front
     if final_line.startswith(' ') and len(final_line) > 2 and final_line[2] != ' ':
         font_small = True
-
 
     # Trim final_line to max 24 characters, since some lines are >24 even without spaces
     if (len(final_line) + spaces) > 24:
@@ -413,10 +750,9 @@ def line_parser(line):
     final_line = final_line.replace('_', chr(35))  # Empty square
     final_line = final_line.replace('°', chr(96))  # Degree icon
     final_line = final_line.replace('|', '/')  # Empty square
-    final_line = final_line.replace('Δ', '^')  # Empty square
-    final_line = final_line.replace('{', '<')  # Replace any remaining { with <, as it should be an arrow
-
-    print(f'sending {final_line}, {spaces}')
+    final_line = final_line.replace('Δ', '^')  # Replace Delta symbol
+    # Replace any remaining { with <, as it should be an arrow
+    final_line = final_line.replace('{', '<')
 
     return final_line, spaces, color, font_small
 
@@ -439,7 +775,6 @@ def determine_color(text: str):
         # Only search in the start of the text
         # Since sometimes, the color is after the text
         if match_token in text[:10]:
-            print(f"Found color: {color_name} in text")
             return color_name, key
     print(f"No color found, defaulting to white. Text {text}")
     return "white", "W"
@@ -510,7 +845,7 @@ def on_error(ws, error):
     display_mgr.write_line_to_page(6, 1, str(error)[0:22], 'R', True)
 
     display_mgr.set_from_page()
-    time.sleep(5)
+    sleep(5)
 
     display_mgr.empty_page()
     display_mgr.clear()
@@ -531,6 +866,7 @@ def on_message(ws, message):
 
 
 def setup_websocket():
+    global ws
     ws = websocket.WebSocket()
     try:
         ws = websocket.WebSocketApp("ws://localhost:8380/interfaces/v1/mcdu",
@@ -544,7 +880,6 @@ def setup_websocket():
         print(f"WebSocket error: {e}")
     finally:
         return
-        # ws.close()
 
     return None
 
@@ -567,13 +902,14 @@ def main():
 
     display_mgr = DisplayManager(device)
 
+    create_button_list_mcdu()
 
     display_mgr.empty_page()
     display_mgr.clear()
     display_mgr.startupscreen()
 
-    # usb_thread = Thread(target=mcdu_create_events)
-    # usb_thread.start()
+    usb_thread = Thread(target=mcdu_create_events, args=[usb, display_mgr])
+    usb_thread.start()
 
     websocket_thread = Thread(target=setup_websocket)
     websocket_thread.start()
