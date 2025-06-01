@@ -382,7 +382,7 @@ def create_button_list_mcdu():
                       DrefType.CMD, ButtonType.TOGGLE))
     buttonlist.append(Button(34, "KEY3", "event:left:3",
                       DrefType.CMD, ButtonType.TOGGLE))
-    buttonlist.append(Button(35, "KEY4", "event:left4",
+    buttonlist.append(Button(35, "KEY4", "event:left:4",
                       DrefType.CMD, ButtonType.TOGGLE))
     buttonlist.append(Button(36, "KEY5", "event:left:5",
                       DrefType.CMD, ButtonType.TOGGLE))

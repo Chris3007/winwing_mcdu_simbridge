@@ -29,24 +29,28 @@ Copy udev rules:
 
     sudo cp udev/71-winwing.rules /etc/udev/rules.d/
 
-Install dependencies:
 
-    sudo apt install python3-hid libhidapi-hidraw0 websocket-client
+Install dependencies with requirements file:\
+```pip install -r requirements.txt```
+
+Or via package manager:\
+```sudo apt install python3-hid libhidapi-hidraw0 websocket-client```
+
 
 Run the script:
+```python3 ./simbridge.py```\
+If it does not work, try with sudo.
+On my device it needs sudo to properly access the USB device.
 
-    python3 ./simbridge.py
 
 # Usage
-
-Start MSFS2020 and load the FlyByWire A32NX.
-
-Ensure SimBridge is running and correctly configured (reachable on localhost:8380).
-
-Run the script as outlined above.
-
-The MCDU output will be mirrored to the hardware and console.
-
+1. Start MSFS2020 and load the FlyByWire A32NX.
+2. Ensure SimBridge is running and correctly configured (reachable on [localhost:8380](http://localhost:8380)).\
+3. Run the script as outlined above.\
+4. The MCDU output will be mirrored to the hardware and console.
+5. If the MCDU stays on 'Connected to Simbrige, waiting for display', check if the web version ([http://localhost:8380/interfaces/mcdu/](http://localhost:8380/interfaces/mcdu/)) does work properly.\
+   5.a If web does not work, try the [troubleshooting steps](https://docs.flybywiresim.com/tools/simbridge/troubleshooting/) from FBW. Note that Linux is not officially supported.\
+   5.b If web does work, see if there is any terminal output. If there are no websocket errors, feel free to create an issue with a paste from your terminal
 
 This project is experimental. Use at your own risk.
 
